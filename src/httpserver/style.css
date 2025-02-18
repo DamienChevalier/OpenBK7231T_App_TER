@@ -45,14 +45,14 @@ textarea {
   height: 318px;
   padding: 5px;
   overflow: auto;
-  background: #1f1f1f;
+  background: #ffffff;
   color: #65c115;
 }
 body {
   text-align: center;
-  font-family: verdana, sans-serif;
-  background: #21333e;
-  color: #eaeaea;
+  font-family: 'Times New Roman', Times, serif, sans-serif;
+  background: #ff0000;
+  color: #ffffff;
 }
 h1 a {
   background: #21333e;

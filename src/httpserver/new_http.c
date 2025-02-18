@@ -35,10 +35,10 @@ const char htmlHeadMeta[] =
 "<meta name=\"robots\" content=\"none\">";
 const char htmlBodyStart[] =
 "<body>"
-"<noscript>To use this device, please enable JavaScript.<br></noscript>"
+"<noscript>To USE this device, please enable JavaScript.<br></noscript>"
 "<div id=\"main\">"
 "<h1>"
-"<a target=\"_blank\" href=\"https://github.com/openshwprojects/OpenBK7231T_App/\">";
+"<a target=\"_blank\" href=\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\">";
 const char htmlBodyStart2[] =
 "</a></h1>";
 const char htmlBodyEnd[] = "</div></body></html>";
@@ -51,9 +51,9 @@ const char htmlFooterReturnToCfgOrMainPage[] =
 
 const char htmlFooterInfo[] =
 "<a target=\"_blank\" "
-"href=\"https://www.elektroda.com/rtvforum/forum390.html\">Forum</a> | "
+"href=\"https://www.elektroda.com/rtvforum/forum390.html\">TEST</a> | "
 "<a target=\"_blank\" "
-"href=\"https://www.youtube.com/watch?v=dQw4w9WgXcQ">YT</a> | "
+"href=\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\">YT</a> | "
 "<a target=\"_blank\" "
 "href=\"https://openbekeniot.github.io/webapp/devicesList.html\">Devices List</a> | "
 "<a target=\"_blank\" "
