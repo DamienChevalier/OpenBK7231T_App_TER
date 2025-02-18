@@ -53,7 +53,7 @@ const char htmlFooterInfo[] =
 "<a target=\"_blank\" "
 "href=\"https://www.elektroda.com/rtvforum/forum390.html\">Forum</a> | "
 "<a target=\"_blank\" "
-"href=\"https://www.youtube.com/@elektrodacom/videos\">YT</a> | "
+"href=\"https://www.youtube.com/watch?v=dQw4w9WgXcQ">YT</a> | "
 "<a target=\"_blank\" "
 "href=\"https://openbekeniot.github.io/webapp/devicesList.html\">Devices List</a> | "
 "<a target=\"_blank\" "
