@@ -6,9 +6,14 @@
 #include "cmd_local.h"
 #include "../driver/drv_ir.h"
 #include "../driver/drv_uart.h"
+#if ENABLE_DRIVER_BL0942
+#include "../driver/drv_bl0942.h"
+#endif
 #include "../driver/drv_public.h"
 #include "../hal/hal_adc.h"
 #include "../hal/hal_flashVars.h"
+#include "../httpserver/http_tcp_server.h"
+#include "../hal/hal_generic.h"
 
 int cmd_uartInitIndex = 0;
 
@@ -304,8 +309,8 @@ static commandResult_t CMD_Flags(const void* context, const char* cmd, const cha
 	union {
 		long long newValue;
 		struct {
-			int ints[2];
-			int dummy[2]; // just to be safe
+			uint32_t ints[2];
+			uint32_t dummy[2]; // just to be safe
 		};
 	} u;
 	// TODO: check on other platforms, on Beken it's 8, 64 bit
@@ -316,11 +321,12 @@ static commandResult_t CMD_Flags(const void* context, const char* cmd, const cha
 			//ADDLOG_INFO(LOG_FEATURE_CMD, "Argument/sscanf error!");
 			return CMD_RES_BAD_ARGUMENT;
 		}
-	}
-	else {
+		//ADDLOG_INFO(LOG_FEATURE_CMD, "CMD_Flags: 0-31: %X 32-63: %2 = %X", u.ints[0], u.ints[1]);
+		u.newValue = (uint64_t)strtoull(args, NULL, 10);
+		//ADDLOG_INFO(LOG_FEATURE_CMD, "CMD_Flags (new): 0-31: %X 32-63: %2 = %X", u.ints[0], u.ints[1]);
+	} else {
 		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
 	}
-
 	CFG_SetFlags(u.ints[0], u.ints[1]);
 	ADDLOG_INFO(LOG_FEATURE_CMD, "New flags set!");
 
@@ -526,7 +532,7 @@ static commandResult_t CMD_SafeMode(const void* context, const char* cmd, const 
 
 void CMD_UARTConsole_Init() {
 #if PLATFORM_BEKEN
-	UART_InitUART(115200, 0);
+	UART_InitUART(115200, 0, false);
 	cmd_uartInitIndex = get_g_uart_init_counter;
 	UART_InitReceiveRingBuffer(512);
 #endif
@@ -759,6 +765,9 @@ commandResult_t CMD_PWMFrequency(const void* context, const char* cmd, const cha
 		return CMD_RES_ERROR;
 	}
 #endif
+	// reapply PWM settings
+	PIN_SetupPins();
+
 	return CMD_RES_OK;
 }
 commandResult_t CMD_IndexRefreshInterval(const void* context, const char* cmd, const char* args, int cmdFlags) {
@@ -796,6 +805,37 @@ commandResult_t CMD_DeepSleep_SetEdge(const void* context, const char* cmd, cons
 
 	return CMD_RES_OK;
 }
+
+#if MQTT_USE_TLS
+static commandResult_t CMD_WebServer(const void* context, const char* cmd, const char* args, int cmdFlags) {	
+	int arg_count;
+	Tokenizer_TokenizeString(args, 0);
+	arg_count = Tokenizer_GetArgsCount();
+	if (arg_count == 0)
+	{
+		ADDLOG_INFO(LOG_FEATURE_CMD, "WebServer:%d", !CFG_GetDisableWebServer());
+		return CMD_RES_OK;
+	} 
+	if (arg_count == 1) {
+		if (strcmp(Tokenizer_GetArg(0) , "0") == 0) {
+			ADDLOG_INFO(LOG_FEATURE_CMD, "Stop WebServer");
+			CFG_SetDisableWebServer(true);
+			CFG_Save_IfThereArePendingChanges();
+			HTTPServer_Stop();
+			return CMD_RES_OK;
+		}
+		else if (strcmp(Tokenizer_GetArg(0), "1") == 0) {
+			ADDLOG_INFO(LOG_FEATURE_CMD, "Enable WebServer and restart");
+			CFG_SetDisableWebServer(false);
+			CFG_Save_IfThereArePendingChanges();
+			HAL_RebootModule();
+			return CMD_RES_OK;
+		}
+	} 
+	ADDLOG_ERROR(LOG_FEATURE_CMD, "Invalid Argument");
+	return CMD_RES_BAD_ARGUMENT;
+}
+#endif
 
 void CMD_Init_Early() {
 	//cmddetail:{"name":"alias","args":"[Alias][Command with spaces]",
@@ -926,6 +966,13 @@ void CMD_Init_Early() {
 	//cmddetail:"fn":"NULL);","file":"cmnds/cmd_main.c","requires":"",
 	//cmddetail:"examples":""}
 	CMD_RegisterCommand("IndexRefreshInterval", CMD_IndexRefreshInterval, NULL);
+#if MQTT_USE_TLS
+	//cmddetail:{"name":"WebServer","args":"[0 - Stop / 1 - Start]",
+	//cmddetail:"descr":"Setting state of WebServer",
+	//cmddetail:"fn":"CMD_WebServer","file":"cmnds/cmd_main.c","requires":"",
+	//cmddetail:"examples":""}
+	CMD_RegisterCommand("WebServer", CMD_WebServer, NULL);
+#endif
 	
 #if ENABLE_OBK_SCRIPTING
 	CMD_InitScripting();
@@ -949,6 +996,11 @@ void CMD_Init_Delayed() {
 #if defined(PLATFORM_BEKEN) || defined(WINDOWS) || defined(PLATFORM_BL602) || defined(PLATFORM_ESPIDF) \
  || defined(PLATFORM_REALTEK)
 	UART_AddCommands();
+#endif
+#if ENABLE_BL_TWIN
+#if ENABLE_DRIVER_BL0942
+	BL0942_AddCommands();
+#endif
 #endif
 }
 
