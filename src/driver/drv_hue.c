@@ -188,6 +188,7 @@ static int HUE_Config_Internal(http_request_t* request) {
 	char utc_time_str[32];
 	strftime(utc_time_str, sizeof(utc_time_str), "%Y-%m-%dT%H:%M:%S", utc_tm);
 
+	http_setup(request, httpMimeTypeJson);
 	poststr(request, "{\"name\":\"Philips hue\",\"mac\":\"");
 	// Mac address
 	poststr(request, mac_str);
@@ -241,17 +242,24 @@ static int HUE_GlobalConfig(http_request_t* request) {
 // http://192.168.0.213/api/username/lights/1/state
 // http://192.168.0.213/description.xml
 int HUE_APICall(http_request_t* request) {
-	if (g_uid == 0) {
+	if (g_uid == 0 || !strncmp(request->url, "/api", 4)) {
 		// not running
 		return 0;
 	}
-	// skip "api/"
-	const char *api = request->url + 4;
-	ADDLOG_INFO("HUE - API call %s", api);
-	//int urlLen = strlen(request->url);
-	// TODO
+	// skip "api"
+	const char *api = request->url + 3;
 
-	return 0;
+	if (*api != '\0' && strncmp(api+1, g_userID, strlen(g_userID)) != 0 && strcmp(api, "/") != 0) {
+		// not for HUE
+		return 0;
+	}
+	
+	//int urlLen = strlen(request->url);
+	if ((*api == '\0') || !strcmp(api, "/")) HUE_Authentication(request);
+	//else if (!strcmp(api, "/config")) HUE_Config_Internal(request);
+	else HUE_NotImplemented(request);
+
+	return 1;
 }
 // backlog startDriver SSDP; startDriver HUE
 // 
@@ -261,7 +269,7 @@ void HUE_Init() {
 
 	WiFI_GetMacAddress((char*)mac);
 	// username - 
-	snprintf(tmp, sizeof(tmp), "%02X%02X%02X",  mac[3], mac[4], mac[5]);
+	snprintf(tmp, sizeof(tmp), "%02x%02x%02x",  mac[3], mac[4], mac[5]);
 	g_userID = strdup(tmp);
 	// SERIAL - as in Tas, full 12 chars of MAC, so 5c cf 7f 13 9f 3d
 	snprintf(tmp, sizeof(tmp), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -273,6 +281,7 @@ void HUE_Init() {
 	snprintf(tmp, sizeof(tmp), "f6543a06-da50-11ba-8d8f-%s", g_serial);
 	g_uid = strdup(tmp);
 
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE init - Serial %s, BridgeID %s, UID %s, username %s", g_serial, g_bridgeID, g_uid, g_userID);
 
 	//HTTP_RegisterCallback("/api", HTTP_ANY, HUE_APICall);
 	HTTP_RegisterCallback("/description.xml", HTTP_GET, HUE_Setup, 0);
