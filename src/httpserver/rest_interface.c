@@ -161,8 +161,9 @@ static int http_rest_post_cmd(http_request_t* request);
 
 
 void init_rest() {
-	HTTP_RegisterCallback("/api/", HTTP_GET, http_rest_get, 1);
-	HTTP_RegisterCallback("/api/", HTTP_POST, http_rest_post, 1);
+	HTTP_RegisterCallback("/api/", HTTP_GET, http_rest_get, 1); // TODO: edit http_rest_get to support HUE
+	HTTP_RegisterCallback("/api/", HTTP_POST, http_rest_post, 1); // TODO: edit http_rest_post to support HUE
+	 
 	HTTP_RegisterCallback("/app", HTTP_GET, http_rest_app, 1);
 }
 
@@ -258,6 +259,7 @@ static int http_rest_get(http_request_t* request) {
 	if (!strncmp(request->url, "api/testflashvars", 17)) {
 		return http_rest_get_flash_vars_test(request);
 	}
+
 
 	http_setup(request, httpMimeTypeHTML);
 	http_html_start(request, "GET REST API");

@@ -1,3 +1,5 @@
+#include <time.h>
+
 #include "../new_common.h"
 #include "../new_pins.h"
 #include "../new_cfg.h"
@@ -11,6 +13,7 @@
 #include "drv_local.h"
 #include "drv_ssdp.h"
 #include "../httpserver/new_http.h"
+#include "drv_hue.h"
 
 // Hue driver for Alexa, requiring btsimonh's SSDP to work
 // Based on Tasmota approach
@@ -108,7 +111,8 @@ void HUE_AppendInformationToHTTPIndexPage(http_request_t* request, int bPreState
 		return;
 	hprintf255(request, "<h4>HUE: searches %i, setup %i, events %i, mService %i, event %i </h4>",
 		stat_searchesReceived, stat_setupXMLVisits, stat_eventsReceived, stat_metaServiceXMLVisits, stat_eventServiceXMLVisits);
-
+	
+	ADDLOG_INFO("DRV_HUE - HUE_Setup registered, %s", NULL);
 }
 
 const char *g_hue_setup_1 = "<?xml version=\"1.0\"?>"
@@ -175,22 +179,43 @@ static int HUE_Authentication(http_request_t* request) {
 }
 static int HUE_Config_Internal(http_request_t* request) {
 
+	unsigned char mac[8];
+	WiFI_GetMacAddress((char*)mac);
+	char mac_str[18];
+	snprintf(mac_str, 18, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+	unsigned int date_time = NTP_GetCurrentTime();
+	struct tm *utc_tm = gmtime((time_t *) &date_time);
+	char utc_time_str[32];
+	strftime(utc_time_str, sizeof(utc_time_str), "%Y-%m-%dT%H:%M:%S", utc_tm);
+
 	poststr(request, "{\"name\":\"Philips hue\",\"mac\":\"");
-	// TODO: mac
+	// Mac address
+	poststr(request, mac_str);
 	poststr(request, "\",\"dhcp\":true,\"ipaddress\":\"");
-	// TODO: ip
+	// IP address
+	poststr(request, HAL_GetMyIPString());
 	poststr(request, "\",\"netmask\":\"");
-	// TODO: mask
+	// Netmask
+	poststr(request, HAL_GetMyMaskString());
 	poststr(request, "\",\"gateway\":\"");
-	// TODO: gw
+	// Gateway
+	poststr(request, HAL_GetMyGatewayString());
 	poststr(request, "\",\"proxyaddress\":\"none\",\"proxyport\":0,\"bridgeid\":\"");
-	// TODO: bridgeid
-	poststr(request, "\",\"UTC\":\"{dt\",\"whitelist\":{\"");
-	// TODO: id
+	// BridgeID
+	poststr(request, g_bridgeID);
+	poststr(request, "\",\"UTC\":\"");
+	// UTC time
+	poststr(request, utc_time_str);
+	poststr(request, "\",\"whitelist\":{\"");
+	// UserID
+	poststr(request, g_userID);
 	poststr(request, "\":{\"last use date\":\"");
-	// TODO: date
+	// UTC time
+	poststr(request, utc_time_str);
 	poststr(request, "\",\"create date\":\"");
-	// TODO: date
+	// UTC time
+	poststr(request, utc_time_str);
 	poststr(request, "\",\"name\":\"Remote\"}},\"swversion\":\"01041302\",\"apiversion\":\"1.17.0\",\"swupdate\":{\"updatestate\":0,\"url\":\"\",\"text\":\"\",\"notify\": false},\"linkbutton\":false,\"portalservices\":false}");
 	poststr(request, NULL);
 
@@ -222,7 +247,8 @@ int HUE_APICall(http_request_t* request) {
 		return 0;
 	}
 	// skip "api/"
-	//const char *api = request->url + 4;
+	const char *api = request->url + 4;
+	ADDLOG_INFO("HUE - API call %s", api);
 	//int urlLen = strlen(request->url);
 	// TODO
 
@@ -239,7 +265,7 @@ void HUE_Init() {
 	snprintf(tmp, sizeof(tmp), "%02X%02X%02X",  mac[3], mac[4], mac[5]);
 	g_userID = strdup(tmp);
 	// SERIAL - as in Tas, full 12 chars of MAC, so 5c cf 7f 13 9f 3d
-	snprintf(tmp, sizeof(tmp), "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	snprintf(tmp, sizeof(tmp), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	g_serial = strdup(tmp);
 	// BridgeID - as in Tas, full 12 chars of MAC with FFFE inside, so 5C CF 7F FFFE 13 9F 3D
 	snprintf(tmp, sizeof(tmp), "%02X%02X%02XFFFE%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
