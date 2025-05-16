@@ -13,7 +13,6 @@
 #include "drv_local.h"
 #include "drv_ssdp.h"
 #include "../httpserver/new_http.h"
-#include "drv_hue.h"
 
 // Hue driver for Alexa, requiring btsimonh's SSDP to work
 // Based on Tasmota approach
