@@ -223,7 +223,17 @@ static int HUE_Config_Internal(http_request_t* request) {
 }
 
 
+static int HUE_Lights(http_request_t* request) {
+	// TODO: lights
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - Lights not implemented");
+	return HUE_NotImplemented(request);
+}
 
+static int HUE_Groups(http_request_t* request) {
+	// TODO: groups
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - Groups not implemented");
+	return HUE_NotImplemented(request);
+}
 
 static int HUE_GlobalConfig(http_request_t* request) {
 
@@ -238,26 +248,57 @@ static int HUE_GlobalConfig(http_request_t* request) {
 	return 0;
 }
 
+bool endsWith(const char *str, const char *suffix) {
+	size_t lenstr = strlen(str);
+	size_t lensuffix = strlen(suffix);
+	if (lensuffix > lenstr) return false;
+	return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
 
 // http://192.168.0.213/api/username/lights/1/state
 // http://192.168.0.213/description.xml
 int HUE_APICall(http_request_t* request) {
-	if (g_uid == 0 || !strncmp(request->url, "/api", 4)) {
+	if (g_uid == 0) {
 		// not running
 		return 0;
 	}
-	// skip "api"
-	const char *api = request->url + 3;
 
-	if (*api != '\0' && strncmp(api+1, g_userID, strlen(g_userID)) != 0 && strcmp(api, "/") != 0) {
+	if (strncmp(request->url, "api", 3) != 0 && (request->url[3] != '/' || request->url[3] != '\0')) {
 		// not for HUE
 		return 0;
 	}
+
+	// skip "api"
+	const char *api = request->url + 3;
+
+	if (*api == '\0' || strcmp(api, "/") == 0) {
+		// Handled by HUE
+		HUE_Authentication(request);
+		return 1;
+	}
+
+	const char *checkhere[] = {"/channels", "/pins", "/channelTypes", "/logconfig", "/reboot", 
+							   "/flash", "/info", "/dumpconfig", "/testconfig", "/testflashvars", 
+							   "/seriallog", "/lfs", "/run", "/del", "/cmnd", "/ota", "/fsblock"};
 	
-	//int urlLen = strlen(request->url);
-	if ((*api == '\0') || !strcmp(api, "/")) HUE_Authentication(request);
-	//else if (!strcmp(api, "/config")) HUE_Config_Internal(request);
-	else HUE_NotImplemented(request);
+	for (int i = 0; i < sizeof(checkhere) / sizeof(checkhere[0]); i++) {
+		if (strncmp(api, checkhere[i], strlen(checkhere[i])) == 0) {
+			// not for HUE
+			return 0;
+		}
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - API call %s", api);
+
+	if (endsWith(api, "/config")) HUE_Config_Internal(request);
+	else if (strstr(api, "/lights")) HUE_Lights(request);
+	else if (strstr(api, "/groups")) HUE_Groups(request);
+	else if (endsWith(api, "/schedules")) HUE_NotImplemented(request);
+	else if (endsWith(api, "/sensors")) HUE_NotImplemented(request);
+	else if (endsWith(api, "/scenes")) HUE_NotImplemented(request);
+	else if (endsWith(api, "/rules")) HUE_NotImplemented(request);
+	else if (endsWith(api, "/resourcelinks")) HUE_NotImplemented(request);
+	else HUE_GlobalConfig(request);
 
 	return 1;
 }
