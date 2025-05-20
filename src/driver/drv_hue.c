@@ -176,7 +176,7 @@ static int HUE_Authentication(http_request_t* request) {
 
 	return 0;
 }
-static int HUE_Config_Internal(http_request_t* request) {
+static int HUE_Config_Internal(http_request_t* request, bool gconfig) {
 
 	unsigned char mac[8];
 	WiFI_GetMacAddress((char*)mac);
@@ -188,7 +188,7 @@ static int HUE_Config_Internal(http_request_t* request) {
 	char utc_time_str[32];
 	strftime(utc_time_str, sizeof(utc_time_str), "%Y-%m-%dT%H:%M:%S", utc_tm);
 
-	http_setup(request, httpMimeTypeJson);
+	if (!gconfig) http_setup(request, httpMimeTypeJson);
 	poststr(request, "{\"name\":\"Philips hue\",\"mac\":\"");
 	// Mac address
 	poststr(request, mac_str);
@@ -225,6 +225,10 @@ static int HUE_Config_Internal(http_request_t* request) {
 
 static int HUE_Lights(http_request_t* request) {
 	// TODO: lights
+	
+
+
+
 	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - Lights not implemented");
 	return HUE_NotImplemented(request);
 }
@@ -241,7 +245,7 @@ static int HUE_GlobalConfig(http_request_t* request) {
 	poststr(request, "{\"lights\":{");
 	// TODO: lights
 	poststr(request, "},\"groups\":{},\"schedules\":{},\"config\":");
-	HUE_Config_Internal(request);
+	HUE_Config_Internal(request, true);
 	poststr(request, "}");
 	poststr(request, NULL);
 
@@ -290,7 +294,7 @@ int HUE_APICall(http_request_t* request) {
 
 	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - API call %s", api);
 
-	if (endsWith(api, "/config")) HUE_Config_Internal(request);
+	if (endsWith(api, "/config")) HUE_Config_Internal(request, false);
 	else if (strstr(api, "/lights")) HUE_Lights(request);
 	else if (strstr(api, "/groups")) HUE_Groups(request);
 	else if (endsWith(api, "/schedules")) HUE_NotImplemented(request);
