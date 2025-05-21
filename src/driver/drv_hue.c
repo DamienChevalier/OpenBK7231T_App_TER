@@ -22,6 +22,9 @@
 // 3. then alexa accesses our XML pages here with GET
 // 4. and can change the binary state (0 or 1) with POST
 
+#define MAX_HUE_DEVICES 32
+#define ECHO_GEN 2
+
 static char *buffer_out = 0;
 static char *g_serial = 0;
 static char *g_userID = 0;
@@ -160,6 +163,17 @@ static int HUE_Setup(http_request_t* request) {
 
 	return 0;
 }
+
+static char* HUE_DeviceId(int id) {
+	char s[32];
+	unsigned char mac[8];
+	WiFI_GetMacAddress((char*)mac);
+	snprintf(s, sizeof(s), "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02X-01", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], (id >> 8) & 0xFF, (id & 0xFF) ^ 0x10);
+
+	return s;
+}
+
+
 static int HUE_NotImplemented(http_request_t* request) {
 
 	http_setup(request, httpMimeTypeJson);
@@ -222,12 +236,143 @@ static int HUE_Config_Internal(http_request_t* request, bool gconfig) {
 	return 0;
 }
 
+bool endsWith(const char *str, const char *suffix) {
+	size_t lenstr = strlen(str);
+	size_t lensuffix = strlen(suffix);
+	if (lensuffix > lenstr) return false;
+	return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
+static int HUE_CountDevices() {
+	// Returns the number of devices in use
+	int nb_channels = 0;
+	for (int i = 1; i < CHANNEL_MAX; i++) {
+		if (CHANNEL_IsInUse(i)) nb_channels++;
+	}
+	return nb_channels;
+}
+
+static bool HUE_IsActive(int device) {
+	// Check whether this device should be reported to Alexa or considered hidden.
+	// Any device whose friendly name start with "$" is considered hidden
+	// TODO: implement this
+	return true;
+}
+
+static int HUE_LightStatus1(int device, http_request_t* request) {
+
+	// TODO: implement lights
+	char bri = 254;
+	poststr(request, "{\"on\":");
+	poststr(request, (CHANNEL_Get(device)) ? "true" : "false");
+	poststr(request, ",\"alert\":\"none\",\"effect\":\"none\",\"reachable\":true}");
+
+	return 0;
+}
+
+static int HUE_LightStatus2(int device, http_request_t* request) {
+	poststr(request, ",\"type\":\"Extended color light\",\"name\":\"");
+	poststr(request, CFG_GetShortDeviceName());
+	poststr(request, "\",\"modelid\":\"");
+	poststr(request, CFG_GetDeviceName());
+	poststr(request, "\",\"manufacturername\":\"OpenBeken\",\"uniqueid\":\"");
+	poststr(request, HUE_DeviceId(device));
+	poststr(request, "\"}");
+
+	return 0;
+}
+
+static int HUE_EncodeLightId(int device) {
+	unsigned char mac[8];
+	WiFI_GetMacAddress((char*)mac);
+	int id = (mac[3] << 20) | (mac[4] << 12) | (mac[5] << 4);
+
+	if (device >= 32) device = 0;
+	if (device > 15) {
+		id |= (1 << 28);
+	}
+	id |= (device & 0xF);
+
+	return id;
+}
+
+static char HUE_DecodeLightId(int hue_id) {
+	char device = hue_id & 0xF;
+	if (hue_id & (1 << 28)) {   // check if bit 25 is set, if so we have
+		device += 16;
+	}
+	if (0 == device) {        // special value 0 is actually relay #32
+		device = 32;
+	}
+	return device;
+}
+
+static int HUE_CheckCompatible(http_request_t* request, bool appending) {
+	int nb_devices = HUE_CountDevices();
+	int maxhue = (nb_devices > MAX_HUE_DEVICES) ? MAX_HUE_DEVICES : nb_devices;
+	char device_id_str[12];
+	for (int i = 1; i <= maxhue; i++) {
+		if (HUE_IsActive(i)) {
+			if (appending) { poststr(request, ","); }
+			poststr(request, "\"");
+			sprintf(device_id_str, "%d", HUE_EncodeLightId(i));
+			poststr(request, device_id_str);
+			poststr(request, "\":{\"state\":");
+			HUE_LightStatus1(i, request);
+			HUE_LightStatus2(i, request);
+			appending = true;
+		}
+	}
+
+	return 0;
+}
 
 static int HUE_Lights(http_request_t* request) {
 	// TODO: lights
-	
+	int device = 1;
+	char device_id_str[12];
+	int device_id;   // the raw device_id used by Hue emulation
+	int nb_devices = HUE_CountDevices();
+	int maxhue = (nb_devices > MAX_HUE_DEVICES) ? MAX_HUE_DEVICES : nb_devices;
+	const char *command = strstr(request->url, "/lights");
+
+	if (endsWith(command, "/lights")) {
+		bool appending = false;
+		http_setup(request, httpMimeTypeJson);
+		poststr(request, "{");
+		HUE_CheckCompatible(request, appending);
+		poststr(request, "}");
+		poststr(request, NULL);
+		return 0;
+	} else if (endsWith(command, "/state")) {
+		/*
+		int id_begin = strstr(command, '/lights') + 7; // skip "/lights/"
+		int id_end = strstr(id_begin, "/state");
+		int len_id = id_end - id_begin;
+		strncpy(device_id_str, id_begin, len_id);
+		device_id = atoi(device_id_str);
+		device = HUE_DecodeLightId(device_id);
 
 
+		if ((device >= 1) || (device <= maxhue)) {
+			
+		}
+		*/
+
+	} else if (strstr(command, "/lights/")) {
+		command += 8; // skip "/lights/"
+		device_id = atoi(command);
+		device = HUE_DecodeLightId(device_id);
+		if ((device >= 1) && (device <= maxhue)) {
+			device = 1;
+		}
+		http_setup(request, httpMimeTypeJson);
+		poststr(request, "{\"state\":");
+		HUE_LightStatus1(device, request);
+		HUE_LightStatus2(device, request);
+		poststr(request, NULL);
+		return 0;
+	}
 
 	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - Lights not implemented");
 	return HUE_NotImplemented(request);
@@ -250,13 +395,6 @@ static int HUE_GlobalConfig(http_request_t* request) {
 	poststr(request, NULL);
 
 	return 0;
-}
-
-bool endsWith(const char *str, const char *suffix) {
-	size_t lenstr = strlen(str);
-	size_t lensuffix = strlen(suffix);
-	if (lensuffix > lenstr) return false;
-	return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
 }
 
 // http://192.168.0.213/api/username/lights/1/state
@@ -331,4 +469,3 @@ void HUE_Init() {
 	//HTTP_RegisterCallback("/api", HTTP_ANY, HUE_APICall);
 	HTTP_RegisterCallback("/description.xml", HTTP_GET, HUE_Setup, 0);
 }
-
