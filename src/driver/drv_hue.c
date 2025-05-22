@@ -13,6 +13,7 @@
 #include "drv_local.h"
 #include "drv_ssdp.h"
 #include "../httpserver/new_http.h"
+#include "../cJSON/cJSON.h"
 
 // Hue driver for Alexa, requiring btsimonh's SSDP to work
 // Based on Tasmota approach
@@ -327,6 +328,28 @@ static int HUE_CheckCompatible(http_request_t* request, bool appending) {
 	return 0;
 }
 
+static int HUE_LightsCommand(int device, int device_id, http_request_t* request) {
+	// TODO: implement lights commands
+	char device_id_str[12];
+	sprintf(device_id_str, "%d", device_id);
+	http_setup(request, httpMimeTypeJson);
+	int len = request->bodylen;
+	char json_str[len+1];
+	memcpy(json_str, request->bodystart, len);
+	json_str[len] = '\0';
+	const cJSON *json = cJSON_Parse(json_str);
+	if (json) {
+		const cJSON *on = cJSON_GetObjectItem(json, "on");
+		CHANNEL_Set(device, cJSON_IsTrue(on), 0);
+	}
+	poststr(request, "[{\"success\":{\"/lights/");
+	poststr(request, device_id_str);
+	poststr(request, "/state/on\":");
+	poststr(request, CHANNEL_Get(device) ? "true" : "false");
+	poststr(request, "}}]");
+	poststr(request, NULL);
+}
+
 static int HUE_Lights(http_request_t* request) {
 	// TODO: lights
 	int device = 1;
@@ -343,22 +366,18 @@ static int HUE_Lights(http_request_t* request) {
 		HUE_CheckCompatible(request, appending);
 		poststr(request, "}");
 		poststr(request, NULL);
-		return 0;
 	} else if (endsWith(command, "/state")) {
-		/*
-		int id_begin = strstr(command, '/lights') + 7; // skip "/lights/"
-		int id_end = strstr(id_begin, "/state");
+		
+		char *id_begin = command + 8; // skip "/lights/"
+		char *id_end = strstr(command, "/state");
 		int len_id = id_end - id_begin;
 		strncpy(device_id_str, id_begin, len_id);
 		device_id = atoi(device_id_str);
 		device = HUE_DecodeLightId(device_id);
 
-
 		if ((device >= 1) || (device <= maxhue)) {
-			
+			HUE_LightsCommand(device, device_id, request);
 		}
-		*/
-
 	} else if (strstr(command, "/lights/")) {
 		command += 8; // skip "/lights/"
 		device_id = atoi(command);
@@ -371,11 +390,12 @@ static int HUE_Lights(http_request_t* request) {
 		HUE_LightStatus1(device, request);
 		HUE_LightStatus2(device, request);
 		poststr(request, NULL);
-		return 0;
+	} else {
+		http_setup(request, httpMimeTypeJson);
+		poststr(request, "{}");
+		poststr(request, NULL);
 	}
-
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - Lights not implemented");
-	return HUE_NotImplemented(request);
+	return 0;
 }
 
 static int HUE_Groups(http_request_t* request) {
@@ -404,25 +424,20 @@ int HUE_APICall(http_request_t* request) {
 		// not running
 		return 0;
 	}
-
 	if (strncmp(request->url, "api", 3) != 0 && (request->url[3] != '/' || request->url[3] != '\0')) {
 		// not for HUE
 		return 0;
 	}
-
 	// skip "api"
 	const char *api = request->url + 3;
-
 	if (*api == '\0' || strcmp(api, "/") == 0) {
 		// Handled by HUE
 		HUE_Authentication(request);
 		return 1;
 	}
-
 	const char *checkhere[] = {"/channels", "/pins", "/channelTypes", "/logconfig", "/reboot", 
 							   "/flash", "/info", "/dumpconfig", "/testconfig", "/testflashvars", 
 							   "/seriallog", "/lfs", "/run", "/del", "/cmnd", "/ota", "/fsblock"};
-	
 	for (int i = 0; i < sizeof(checkhere) / sizeof(checkhere[0]); i++) {
 		if (strncmp(api, checkhere[i], strlen(checkhere[i])) == 0) {
 			// not for HUE
@@ -430,7 +445,12 @@ int HUE_APICall(http_request_t* request) {
 		}
 	}
 
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - API call %s", api);
+	char buf[128];
+	int len = request->bodylen;
+	if (len > sizeof(buf) - 1) len = sizeof(buf) - 1;
+	memcpy(buf, request->bodystart, len);
+	buf[len] = 0;
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "HUE - body: %s", buf);
 
 	if (endsWith(api, "/config")) HUE_Config_Internal(request, false);
 	else if (strstr(api, "/lights")) HUE_Lights(request);
