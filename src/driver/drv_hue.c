@@ -3,7 +3,7 @@
 #include "../new_common.h"
 #include "../new_pins.h"
 #include "../new_cfg.h"
-// Commands register, execution API and cmd tokenizer
+// Commands register, execution API and cmd tokenizer 
 #include "../cmnds/cmd_public.h"
 #include "../mqtt/new_mqtt.h"
 #include "../logging/logging.h"
